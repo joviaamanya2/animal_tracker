@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f7f2">
+  <title>Animal Tracker · Records</title>
+  <style>
+    :root { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; color: #17231c; background: #f5f7f2; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 22px max(22px, calc((100vw - 1100px) / 2)); background: white; border-bottom: 1px solid #e4e9e2; }
+    .brand { font-weight: 750; letter-spacing: -.03em; font-size: 20px; }
+    .status { color: #607166; font-size: 13px; }
+    main { max-width: 1100px; margin: 38px auto; padding: 0 22px; }
+    h1 { margin: 0; font-size: clamp(26px, 4vw, 36px); letter-spacing: -.04em; }
+    .sub { margin: 8px 0 26px; color: #69786e; }
+    .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .card, .panel { background: white; border: 1px solid #e4e9e2; border-radius: 16px; box-shadow: 0 4px 18px #1f38230a; }
+    .card { padding: 22px; }
+    .label { color: #68776d; font-size: 13px; }
+    .value { margin-top: 10px; font-size: 38px; line-height: 1; font-weight: 720; letter-spacing: -.04em; }
+    .panel { margin-top: 22px; overflow: hidden; }
+    .panel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 20px 22px; border-bottom: 1px solid #edf0eb; }
+    h2 { margin: 0; font-size: 17px; }
+    .session { color: #718076; font-size: 12px; }
+    .table-wrap { overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; text-align: left; }
+    th, td { padding: 13px 22px; border-bottom: 1px solid #f0f2ee; white-space: nowrap; font-size: 13px; }
+    th { color: #78857c; font-weight: 600; background: #fbfcfa; }
+    td { color: #34443a; }
+    tr:last-child td { border-bottom: 0; }
+    .pill { border-radius: 99px; padding: 5px 9px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+    .out { color: #965b12; background: #fff1d7; }
+    .in { color: #27734c; background: #e2f5e9; }
+    .empty { padding: 35px 22px; color: #78857c; text-align: center; }
+    .note { margin-top: 17px; color: #718076; font-size: 12px; line-height: 1.6; }
+    @media (max-width: 650px) { main { margin-top: 27px; } .cards { gap: 9px; } .card { padding: 15px 12px; } .value { font-size: 30px; } .label { font-size: 11px; } header { padding: 18px 22px; } }
+  </style>
+</head>
+<body>
+  <header><div class="brand">Animal Tracker</div><div class="status" id="connection">Connecting…</div></header>
+  <main>
+    <h1>Gate records</h1>
+    <p class="sub">Animal crossings recorded for the latest counting session.</p>
+    <section class="cards" aria-label="Session totals">
+      <article class="card"><div class="label">Went out</div><div class="value" id="out">0</div></article>
+      <article class="card"><div class="label">Came back in</div><div class="value" id="in">0</div></article>
+      <article class="card"><div class="label">Still out · net count</div><div class="value" id="still-out">0</div></article>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2>Recent crossings</h2><span class="session" id="session">No session yet</span></div>
+      <div class="table-wrap"><table><thead><tr><th>Time</th><th>Temporary ID</th><th>Direction</th></tr></thead><tbody id="events"><tr><td colspan="3" class="empty">Waiting for the first crossing…</td></tr></tbody></table></div>
+    </section>
+    <p class="note">Temporary IDs come from video tracking and can change if an animal is obscured or the tracker restarts. “Still out” is the session’s outgoing count minus return count; it does not identify individual missing animals.</p>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const fmt = (value) => value ? new Date(value).toLocaleString() : "—";
+    async function refresh() {
+      try {
+        const response = await fetch("/api/state", { cache: "no-store" });
+        if (!response.ok) throw new Error("Dashboard API unavailable");
+        const data = await response.json();
+        $("connection").textContent = "Live · refreshes every 3 seconds";
+        $("out").textContent = data.counts.out;
+        $("in").textContent = data.counts.in;
+        $("still-out").textContent = data.counts.still_out;
+        $("session").textContent = data.session ? `Session started ${fmt(data.session.started_at)}${data.session.ended_at ? " · ended" : " · active"}` : "No session yet";
+        const body = $("events");
+        body.replaceChildren();
+        if (!data.events.length) {
+          const row = body.insertRow();
+          const cell = row.insertCell(); cell.colSpan = 3; cell.className = "empty"; cell.textContent = "Waiting for the first crossing…";
+        } else {
+          for (const event of data.events) {
+            const row = body.insertRow();
+            row.insertCell().textContent = fmt(event.occurred_at);
+            row.insertCell().textContent = event.track_id;
+            const direction = row.insertCell();
+            const pill = document.createElement("span"); pill.className = `pill ${event.direction}`; pill.textContent = event.direction;
+            direction.append(pill);
+          }
+        }
+      } catch { $("connection").textContent = "Waiting for counter or database…"; }
+    }
+    refresh(); setInterval(refresh, 3000);
+  </script>
+</body>
+</html>
